@@ -5,13 +5,36 @@ output:
     keep_md: true
 ---
 
+We start with some initial setup, which includes loading packages and setting global `knitr` options:
+
+```{r setup,echo=TRUE, warning=FALSE}
+
+library(ggplot2)
+library(knitr)
+
+opts_knit$set(echo=TRUE, comment="")
+
+```
+
 
 ## Loading and preprocessing the data
 
+```{r readData}
+
+fitData <- read.csv(file="activity.csv",header = TRUE)
+
+```
 
 
 ## What is mean total number of steps taken per day?
 
+```{r stepsPerDay}
+
+# Group the data by day and sum up the steps, removing NA values:
+stepsPerDay <- tapply(X = fitData$steps,INDEX = fitData$date,FUN = sum, na.rm=TRUE)
+
+print(paste0("Mean number of steps per day: ",mean(stepsPerDay)))
+```
 
 
 ## What is the average daily activity pattern?
