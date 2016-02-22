@@ -31,10 +31,10 @@ fitData <- read.csv(file="activity.csv", header = TRUE, stringsAsFactors = FALSE
 
 Because the last question involves the days of the week, we add that information to the data frame. Also, we add a human readable form of the time of day (format hh:mm).
 
-```{r addWeekdays}
+```{r addDayOfWeek}
 
 # Both wday and ymd are from the lubridate package
-fitData$weekDay <- wday(ymd(fitData$date),label = TRUE)
+fitData$dayOfWeek <- wday(ymd(fitData$date),label = TRUE)
 
 
 ```
@@ -91,7 +91,7 @@ The mean steps per day is `r meanStepsPerDay` steps/day, and the median is `r me
 
 ## What is the average daily activity pattern?
 
-Similar to the previous step, we group the data by the interval, and average the number of steps for each interval (after remoing the missing values). Then, we create a data frame for plotting:
+Similar to the previous step, we group the data by the interval, and average the number of steps for each interval (after removing the missing values). Then, we create a data frame for plotting:
 
 ```{r AveActivity}
 
@@ -101,6 +101,7 @@ aveStepsPerInterval <-  tapply(X = fitData$steps,
                                FUN = mean, 
                                na.rm=TRUE)
 
+# Then, create a data frame to use with ggplot:
 activity <- 
   data.frame(interval = as.numeric(names(aveStepsPerInterval)),
              aveSteps = aveStepsPerInterval,
@@ -148,7 +149,7 @@ sum(stepsPerDay<1)
 
 > Note that we are using the fact that `sum(NA,na.rm=TRUE)` equals zero.
 
-To impute the missing values, we generate Poisson random variables which have mean $\lambda$ equal to the average of the corresponding time interval, respectively. The average steps per interval are found in the object `aveStepsPerInterval`, created above.
+To impute the missing values, we generate data that follows a Poisson distribution with mean $\lambda$ equal to the average of the corresponding time interval. The average steps per interval are found in the object `aveStepsPerInterval`, created above.
 
 ```{r impute}
 
@@ -156,6 +157,7 @@ aveStepsAtMissingVal <-
   activity$aveSteps[match(fitData$interval[is.na(fitData$steps)],
                           activity$interval)]
 
+# Always set the seed!
 set.seed(42)
 imputedValues <- mapply(rpois, n=1, lambda= aveStepsAtMissingVal)
 
@@ -203,4 +205,67 @@ For the imputed data, the mean steps per day is `r meanStepsPerDayNoNA` steps/da
 
 ## Are there differences in activity patterns between weekdays and weekends?
 
-Using the newly created data frame, with missing 
+Using the newly created data frame `fitDataNoNA`, with missing values imputed, we now inspect wether there are any differences in activity between weekdays and weekends. First, we add the 
+
+```{r addPartOfWeekNoNA}
+
+# Add new column:
+fitDataNoNA$partOfWeek <- character(nrow(fitDataNoNA))
+# Then, set part of week:
+fitDataNoNA$partOfWeek[fitDataNoNA$dayOfWeek %in% c("Sat","Sun")] <- "weekend"
+fitDataNoNA$partOfWeek[!(fitDataNoNA$dayOfWeek %in% c("Sat","Sun"))] <- "weekday"
+# Then, make into a factor:
+fitDataNoNA$partOfWeek <- as.factor(fitDataNoNA$partOfWeek)
+
+```
+
+Next, we split the dataframe into parts based on the weekday/weekend classification:
+
+```{r splitDataFrame}
+
+splitData <- split(x = fitDataNoNA, f = fitDataNoNA$partOfWeek)
+
+```
+
+Then, similarly as before, we group the data (for weekdays and weekends separately) by the interval and find hte average number of steps:
+
+```{r AveActivityParOfWeek}
+
+# Group the data by interval and average the steps
+aveStepsPerInterval.weekday <-  
+  tapply(X = splitData[["weekday"]]$steps,
+         INDEX = splitData[["weekday"]]$interval, 
+         FUN = mean)
+# ... and for the weekends:
+aveStepsPerInterval.weekend <-  
+  tapply(X = splitData[["weekend"]]$steps,
+         INDEX = splitData[["weekend"]]$interval, 
+         FUN = mean)
+
+# Create a data frame for ggplot:
+activityNoNA <- 
+  data.frame(interval = c(as.numeric(names(aveStepsPerInterval.weekday)),
+                          as.numeric(names(aveStepsPerInterval.weekend))
+                          ),
+             aveSteps = c(aveStepsPerInterval.weekday,
+                          aveStepsPerInterval.weekend),
+             partOfWeek = c(rep("weekday",times=length(aveStepsPerInterval.weekday)),
+                            rep("weekend",times=length(aveStepsPerInterval.weekend)))
+  )
+
+```
+
+Then, we create a time series plot of the average steps per time interval:
+
+```{r timeSeriesPartOfWeek}
+
+ggplot(activityNoNA, aes(x = interval, y = aveSteps, group = partOfWeek)) +
+    geom_line(col='blue') +
+    labs(x="Interval", y="Average number of steps per interval") +
+    facet_wrap( ~ partOfWeek,nrow = 2)
+
+```
+
+Comparign these time series reveals tow major differences. The first one is that the activity during the morning hours of the weekdays is signifcantly higher than over the weekend; this probably corresponds to the morning commute. Second, after the weekday morning commute, the person is not as active as during the weekend, which could correspond to the person being sedentary at work.
+
+We also see that on the weekends, the person's wake up times are not as regulear as those for the weekdays. This can probably be attributed to the person not setting an alarm on the weekend and sleeping in :)
